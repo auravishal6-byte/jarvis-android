@@ -3,12 +3,12 @@
 
     <application
         android:theme="@android:style/Theme.Material.NoActionBar"
-        android:label="J.A.R.V.I.S."
+        android:label="Jarvis New"
         android:usesCleartextTraffic="false"
         android:hardwareAccelerated="true">
 
         <activity
-            android:name=".MainActivity"
+            android:name="com.jarvis.ai.MainActivity"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
