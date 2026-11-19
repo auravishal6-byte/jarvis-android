@@ -1,0 +1,3 @@
+<resources>
+    <string name="jarvis_accessibility_description">JARVIS helps you navigate battery settings for unused apps. It only attempts the requested restriction and does not collect or transmit screen content.</string>
+</resources>

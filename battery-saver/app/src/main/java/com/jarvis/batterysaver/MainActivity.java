@@ -33,7 +33,7 @@ public class MainActivity extends Activity {
     private static final int REQ_NOTIFICATIONS = 41;
 
     private TextView percent, state, temp, monitor;
-    private TextView scanStatus;
+    private TextView scanStatus, accessibilityStatus;
     private LinearLayout unusedContainer;
 
     @Override
@@ -59,6 +59,13 @@ public class MainActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        if (accessibilityStatus != null) {
+            accessibilityStatus.setText(
+                    isAccessibilityEnabled()
+                    ? "JARVIS Accessibility: ENABLED"
+                    : "JARVIS Accessibility: NOT ENABLED"
+            );
+        }
         if (scanStatus != null) {
             scanStatus.setText(
                     UnusedAppsScanner.hasUsageAccess(this)
@@ -172,6 +179,17 @@ public class MainActivity extends Activity {
         sp.topMargin = dp(12);
         root.addView(scanStatus, sp);
 
+        accessibilityStatus = label(
+                "JARVIS Accessibility: CHECKING",
+                13, 0xffffcc66, true);
+        LinearLayout.LayoutParams ap =
+                new LinearLayout.LayoutParams(-1, -2);
+        ap.topMargin = dp(14);
+        root.addView(accessibilityStatus, ap);
+
+        addButton(root, "ENABLE JARVIS ACCESSIBILITY",
+                v -> openAccessibilitySettings());
+
         addButton(root, "GRANT USAGE ACCESS",
                 v -> openUsageAccessSettings());
 
@@ -282,15 +300,34 @@ public class MainActivity extends Activity {
             info.setBackground(
                     shape(0xff0c4169, 0xff2bb1e6, 1, 12));
 
+            info.setText("OPEN APP INFO / TRY RESTRICTION");
             info.setOnClickListener(v -> {
+                if (!isAccessibilityEnabled()) {
+                    scanStatus.setText(
+                            "Enable JARVIS Accessibility first.");
+                    openAccessibilitySettings();
+                    return;
+                }
+
+                getSharedPreferences(
+                        "jarvis_restriction", MODE_PRIVATE)
+                        .edit()
+                        .putBoolean("flow_active", true)
+                        .putBoolean("battery_page_open", false)
+                        .putBoolean("pending_verify", false)
+                        .putString("target_package", app.packageName)
+                        .apply();
+
                 try {
                     Intent intent = new Intent(
                             Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
                             Uri.parse("package:" + app.packageName));
                     startActivity(intent);
                 } catch (Exception e) {
-                    scanStatus.setText(
-                            "Could not open App Info.");
+                    getSharedPreferences(
+                            "jarvis_restriction", MODE_PRIVATE)
+                            .edit().putBoolean("flow_active", false).apply();
+                    scanStatus.setText("Could not open App Info.");
                 }
             });
 
@@ -298,6 +335,27 @@ public class MainActivity extends Activity {
                     new LinearLayout.LayoutParams(-1, dp(48));
             bp.topMargin = dp(8);
             card.addView(info, bp);
+        }
+    }
+
+
+    private boolean isAccessibilityEnabled() {
+        String enabled = Settings.Secure.getString(
+                getContentResolver(),
+                Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
+
+        String expected = new android.content.ComponentName(
+                this, BackgroundRestrictionAccessibilityService.class)
+                .flattenToString();
+
+        return enabled != null && enabled.contains(expected);
+    }
+
+    private void openAccessibilitySettings() {
+        try {
+            startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS));
+        } catch (Exception e) {
+            openSetting(Settings.ACTION_SETTINGS);
         }
     }
 
