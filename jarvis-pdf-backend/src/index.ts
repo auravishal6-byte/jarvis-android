@@ -47,11 +47,18 @@ async function generateContent(
   language: string,
   apiKey: string,
 ): Promise<AIResult> {
+  const languageInstruction =
+    language === "hi"
+      ? "Hindi (Devanagari script)"
+      : language === "hinglish"
+        ? "natural Hinglish: a conversational mix of Hindi and English written in Roman script (Latin letters). Keep technical terms and commonly used English words in English. Do not use Devanagari script."
+        : "English";
+
   const instruction = `
 Create a professional, detailed document based on this request:
 ${prompt}
 
-Write the document in ${language === "hi" ? "Hindi" : "English"}.
+Write the document in ${languageInstruction}.
 
 Return ONLY valid JSON in this exact structure:
 {
