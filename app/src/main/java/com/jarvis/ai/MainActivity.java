@@ -9,6 +9,12 @@ import android.content.pm.ResolveInfo;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import java.io.FileOutputStream;
+import java.io.File;
+import java.io.OutputStream;
+import android.webkit.JavascriptInterface;
+import android.util.Base64;
+import android.os.Environment;
 import android.provider.MediaStore;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
@@ -32,6 +38,7 @@ public class MainActivity extends Activity {
         WebSettings settings = webView.getSettings();
         settings.setJavaScriptEnabled(true);
         settings.setDomStorageEnabled(true);
+        webView.addJavascriptInterface(new PdfBridge(), "Android");
 
         webView.setWebViewClient(new WebViewClient());
         webView.setWebChromeClient(new WebChromeClient() {
@@ -115,6 +122,61 @@ public class MainActivity extends Activity {
             } catch (Exception ignored) {
             }
             cameraUri = null;
+        }
+    }
+
+
+    private class PdfBridge {
+        @JavascriptInterface
+        public String savePdf(String base64, String filename) {
+            try {
+                if (base64 == null || base64.length() > 20000000) {
+                    return "ERROR: PDF too large.";
+                }
+
+                String name = filename == null ? "JARVIS_Document.pdf" : filename;
+                name = name.replaceAll("[^a-zA-Z0-9._-]", "_");
+                if (!name.toLowerCase().endsWith(".pdf")) name += ".pdf";
+
+                byte[] bytes = Base64.decode(base64, Base64.DEFAULT);
+                if (bytes.length == 0 || bytes.length > 15 * 1024 * 1024) {
+                    return "ERROR: Invalid PDF size.";
+                }
+
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    ContentValues values = new ContentValues();
+                    values.put(MediaStore.MediaColumns.DISPLAY_NAME, name);
+                    values.put(MediaStore.MediaColumns.MIME_TYPE, "application/pdf");
+                    values.put(MediaStore.MediaColumns.RELATIVE_PATH,
+                            Environment.DIRECTORY_DOWNLOADS + "/JARVIS");
+                    values.put(MediaStore.MediaColumns.IS_PENDING, 1);
+
+                    Uri uri = getContentResolver().insert(
+                            MediaStore.Downloads.EXTERNAL_CONTENT_URI, values);
+                    if (uri == null) return "ERROR: Cannot create download.";
+
+                    try (OutputStream out = getContentResolver().openOutputStream(uri)) {
+                        if (out == null) throw new Exception("Cannot open PDF.");
+                        out.write(bytes);
+                    }
+
+                    ContentValues done = new ContentValues();
+                    done.put(MediaStore.MediaColumns.IS_PENDING, 0);
+                    getContentResolver().update(uri, done, null, null);
+                } else {
+                    File dir = getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS);
+                    if (dir == null) return "ERROR: Storage unavailable.";
+                    if (!dir.exists() && !dir.mkdirs()) {
+                        return "ERROR: Cannot create folder.";
+                    }
+                    try (FileOutputStream out = new FileOutputStream(new File(dir, name))) {
+                        out.write(bytes);
+                    }
+                }
+                return "OK:" + name;
+            } catch (Exception e) {
+                return "ERROR: " + e.getMessage();
+            }
         }
     }
 

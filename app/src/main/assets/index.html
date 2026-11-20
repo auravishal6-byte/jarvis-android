@@ -48,6 +48,19 @@ body.archive-active .intro,body.archive-active main>.panel,body.archive-active .
 <div class="row"><button class="attach" aria-label="Add attachment" onclick="toggleSheet()"><svg viewBox="0 0 24 24" fill="none"><path d="M12 5.5v13M5.5 12h13" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"/></svg></button><input onclick="document.body.classList.add('chat-active')" onfocus="document.body.classList.add('chat-active')" id="message" aria-label="Message JARVIS" placeholder="Ask JARVIS anything..." onkeydown="if(event.key==='Enter')sendMessage()"><button class="send" aria-label="Send message" onclick="sendMessage()"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 4l15 8-15 8 3-8-3-8z" fill="currentColor"/><path d="M8 12h8" stroke="#278bdf" stroke-width="1.5"/></svg></button></div>
 <div class="sheet" id="sheet"><button class="sheet-row" onclick="pickCamera()"><span class="sheet-ic"><svg viewBox="0 0 24 24" fill="none"><path d="M4 7.5h3l2-2.3h6l2 2.3h3V19H4z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><circle cx="12" cy="12.8" r="3.4" stroke="currentColor" stroke-width="1.8"/></svg></span>Camera</button><button class="sheet-row" onclick="pickPhotos()"><span class="sheet-ic"><svg viewBox="0 0 24 24" fill="none"><rect x="4" y="5" width="16" height="14" rx="2.5" stroke="currentColor" stroke-width="1.8"/><circle cx="9.2" cy="10" r="1.5" fill="currentColor"/><path d="M4.5 16.5l4-3.6 3.2 2.8 2.8-2.3 5 3.9" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg></span>Photos</button><button class="sheet-row" onclick="pickFiles()"><span class="sheet-ic"><svg viewBox="0 0 24 24" fill="none"><path d="M9 12.4l4.9-4.9a3.1 3.1 0 014.4 4.4l-6.6 6.6a5 5 0 01-7-7l6-6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></span>Files</button></div>
 <input type="file" id="filePick" style="display:none" onchange="onFilePicked(event)"></section>
+
+<section class="panel" id="pdfMaker">
+ <div class="panel-head"><h2>Professional PDF Maker</h2><span class="tag">AI POWERED</span></div>
+ <p class="small">AI se professional PDF document banayein aur phone mein save karein.</p>
+ <label class="key-label" for="pdfPrompt">Kis topic par PDF banani hai?</label>
+ <textarea id="pdfPrompt" maxlength="12000" placeholder="Example: Solar energy par detailed project report..." style="width:100%;min-height:110px;border:0;border-radius:13px;background:#e0e8f5;padding:13px;color:var(--ink);font:13px Arial;resize:vertical"></textarea>
+ <label class="key-label" for="pdfLanguage">PDF language</label>
+ <select id="pdfLanguage" style="width:100%;height:44px;border:0;border-radius:12px;background:#e0e8f5;padding:10px;color:var(--ink)">
+  <option value="hi">Hindi</option><option value="en">English</option>
+ </select>
+ <button class="save" id="pdfGenerate" onclick="generateProfessionalPDF()" style="width:100%;margin-top:14px">Generate & Download PDF</button>
+ <p class="small" id="pdfStatus" role="status" aria-live="polite">PDF aapke phone ke Downloads/JARVIS folder mein save hogi.</p>
+</section>
 <div class="hero" aria-hidden="true"><div class="orb"><div class="orbit"></div><div class="orbit two"></div><div class="orbit three"></div><div class="orb-core"><svg class="core-logo" viewBox="0 0 40 40" fill="none"><path d="M20 5l3.8 11.2L35 20l-11.2 3.8L20 35l-3.8-11.2L5 20l11.2-3.8z" fill="currentColor"/></svg></div></div><div class="orb-caption" style="font-size:13px;font-weight:700;letter-spacing:1.2px;color:#246dbc;text-shadow:0 0 7px #ffffff,0 0 14px #72b8ff,0 0 22px #72b8ff88">Made by Vishal</div></div>
 <section id="connection" class="panel connection" aria-labelledby="connection-heading"><div class="panel-head"><h2 id="connection-heading">Gemini connection</h2><span class="tag">API KEY</span></div><label class="key-label" for="apiKey">Your Gemini API key</label><div class="key-row"><input id="apiKey" type="password" placeholder="Enter your API key"><button class="save" onclick="saveKey()">Save key</button></div><p class="small">Your key is stored on this device. Do not share it.</p></section>
 <section id="archive" aria-label="History and memory">
@@ -298,6 +311,51 @@ function onFilePicked(ev){
   alert('Sorry Sir, abhi sirf photo, PDF aur text file bhej sakte ho.');
  }
 }
+
+async function generateProfessionalPDF(){
+ const prompt=document.getElementById('pdfPrompt').value.trim();
+ const language=document.getElementById('pdfLanguage').value;
+ const status=document.getElementById('pdfStatus');
+ const button=document.getElementById('pdfGenerate');
+ if(!prompt){alert('PDF ka topic likhiye.');return;}
+ button.disabled=true;status.textContent='AI document bana raha hai... Kripya wait karein.';
+ try{
+  const response=await fetch('https://jarvis-pdf-backend.auravishal6.workers.dev',{
+   method:'POST',
+   headers:{'Content-Type':'application/json'},
+   body:JSON.stringify({prompt:prompt,language:language})
+  });
+  if(!response.ok){
+   let message='PDF generation failed.';
+   try{const err=await response.json();if(err.error)message=err.error;}catch(e){}
+   throw new Error(message);
+  }
+  const blob=await response.blob();
+  if(blob.size===0||blob.size>15*1024*1024)throw new Error('PDF size invalid or above 15 MB.');
+  const filename='JARVIS_Document_'+Date.now()+'.pdf';
+  if(window.Android&&typeof Android.savePdf==='function'){
+   const bytes=new Uint8Array(await blob.arrayBuffer());
+   let binary='';
+   const chunk=0x8000;
+   for(let i=0;i<bytes.length;i+=chunk){
+    binary+=String.fromCharCode.apply(null,bytes.subarray(i,Math.min(i+chunk,bytes.length)));
+   }
+   const result=Android.savePdf(btoa(binary),filename);
+   if(!result||result.indexOf('OK:')!==0)throw new Error(result||'Phone could not save PDF.');
+   status.textContent='PDF successfully saved: Downloads/JARVIS/'+filename;
+  }else{
+   const url=URL.createObjectURL(blob);
+   const a=document.createElement('a');a.href=url;a.download=filename;a.click();
+   setTimeout(()=>URL.revokeObjectURL(url),30000);
+   status.textContent='PDF download started.';
+  }
+ }catch(e){
+  status.textContent='Error: '+e.message;
+ }finally{
+  button.disabled=false;
+ }
+}
+
 (function restore(){
  if(convo.length){
   chat.innerHTML='';
