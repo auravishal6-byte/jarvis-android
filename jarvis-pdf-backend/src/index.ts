@@ -1,3 +1,4 @@
+import "regenerator-runtime/runtime";
 import { PDFDocument, rgb, type PDFFont, type PDFPage } from "pdf-lib";
 import fontkit from "@pdf-lib/fontkit";
 import devanagariFont from "./fonts/NotoSansDevanagari-Regular.ttf";
