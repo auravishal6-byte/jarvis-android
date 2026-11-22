@@ -5,7 +5,10 @@ import android.app.Activity;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.PackageManager;
+import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.Paint;
+import android.graphics.RectF;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
@@ -16,17 +19,18 @@ import android.provider.Settings;
 import android.view.Gravity;
 import android.view.View;
 import android.widget.Button;
+import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
 
 import java.util.List;
+import java.util.Locale;
+import java.util.concurrent.TimeUnit;
 
 import androidx.work.ExistingPeriodicWorkPolicy;
 import androidx.work.PeriodicWorkRequest;
 import androidx.work.WorkManager;
-import java.util.concurrent.TimeUnit;
-
 
 public class MainActivity extends Activity {
 
@@ -35,13 +39,19 @@ public class MainActivity extends Activity {
     private TextView percent, state, temp, monitor;
     private TextView scanStatus, accessibilityStatus;
     private LinearLayout unusedContainer;
+    private BatteryRing batteryRing;
+
+    private final int BG = 0xff050b18;
+    private final int BLUE = 0xff28baff;
+    private final int WHITE = 0xfff3f8ff;
+    private final int MUTED = 0xff9aafc8;
 
     @Override
     public void onCreate(Bundle saved) {
         super.onCreate(saved);
 
-        getWindow().setStatusBarColor(Color.rgb(5, 12, 26));
-        getWindow().setNavigationBarColor(Color.rgb(5, 12, 26));
+        getWindow().setStatusBarColor(BG);
+        getWindow().setNavigationBarColor(BG);
 
         makeScreen();
         refresh();
@@ -59,167 +69,239 @@ public class MainActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+
         if (accessibilityStatus != null) {
             accessibilityStatus.setText(
                     isAccessibilityEnabled()
-                    ? "JARVIS Accessibility: ENABLED"
-                    : "JARVIS Accessibility: NOT ENABLED"
-            );
+                    ? "● Accessibility Enabled"
+                    : "● Accessibility Not Enabled");
+            accessibilityStatus.setTextColor(
+                    isAccessibilityEnabled() ? 0xff48e0a4 : 0xffffbd66);
         }
+
         if (scanStatus != null) {
-            scanStatus.setText(
-                    UnusedAppsScanner.hasUsageAccess(this)
-                            ? "Usage Access: GRANTED"
-                            : "Usage Access: NOT GRANTED"
-            );
+            boolean granted = UnusedAppsScanner.hasUsageAccess(this);
+            scanStatus.setText(granted
+                    ? "● Usage Access Granted"
+                    : "● Usage Access Not Granted");
+            scanStatus.setTextColor(
+                    granted ? 0xff48e0a4 : 0xffffbd66);
         }
     }
 
     private void makeScreen() {
         ScrollView scroll = new ScrollView(this);
         scroll.setFillViewport(true);
+        scroll.setBackgroundColor(BG);
 
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(dp(22), dp(28), dp(22), dp(24));
-        root.setBackgroundColor(Color.rgb(5, 12, 26));
+        root.setPadding(dp(20), dp(24), dp(20), dp(28));
+        root.setBackgroundColor(BG);
         scroll.addView(root);
 
-        TextView brand = label("J.A.R.V.I.S.", 28, 0xff41cdff, true);
-        brand.setLetterSpacing(.16f);
+        TextView brand = label("J.A.R.V.I.S.", 27, WHITE, true);
+        brand.setLetterSpacing(0.12f);
         root.addView(brand);
 
-        TextView sub = label(
-                "BATTERY INTELLIGENCE SYSTEM",
-                11, 0xffb4d7ec, false);
-        sub.setLetterSpacing(.12f);
-        root.addView(sub);
+        TextView subtitle = label(
+                "SMART BATTERY INTELLIGENCE",
+                10, BLUE, true);
+        subtitle.setLetterSpacing(0.18f);
+        addTopSpace(root, subtitle, 3);
 
-        LinearLayout panel = new LinearLayout(this);
-        panel.setOrientation(LinearLayout.VERTICAL);
-        panel.setGravity(Gravity.CENTER);
-        panel.setPadding(dp(18), dp(22), dp(18), dp(22));
-        panel.setBackground(shape(0xff0b1d34, 0xff146996, 2, 22));
+        LinearLayout statusRow = new LinearLayout(this);
+        statusRow.setGravity(Gravity.CENTER_VERTICAL);
+        TextView live = label("● SYSTEM ONLINE", 10, 0xff48e0a4, true);
+        statusRow.addView(live);
+        root.addView(statusRow, topParams(20));
 
-        LinearLayout.LayoutParams pp =
-                new LinearLayout.LayoutParams(-1, dp(205));
-        pp.topMargin = dp(26);
-        root.addView(panel, pp);
+        // Battery dashboard
+        LinearLayout batteryCard = glassCard();
+        batteryCard.setGravity(Gravity.CENTER);
+        batteryCard.setPadding(dp(16), dp(20), dp(16), dp(20));
+        batteryCard.setBackground(gradient(
+                0xff102944, 0xff091629, 0xff1a83bd, 22));
 
-        percent = label("--%", 58, Color.WHITE, true);
-        panel.addView(percent);
+        root.addView(batteryCard, topParams(18));
 
-        state = label("Checking battery…", 14, 0xff6fd2ff, false);
-        panel.addView(state);
+        TextView batteryTitle = label(
+                "BATTERY OVERVIEW", 12, BLUE, true);
+        batteryTitle.setLetterSpacing(0.14f);
+        batteryCard.addView(batteryTitle);
 
-        temp = label("Temperature: --", 13, 0xffd5e4ef, false);
-        LinearLayout.LayoutParams tp =
-                new LinearLayout.LayoutParams(-2, -2);
-        tp.topMargin = dp(12);
-        panel.addView(temp, tp);
+        FrameLayout ringFrame = new FrameLayout(this);
+        batteryRing = new BatteryRing();
+        ringFrame.addView(batteryRing,
+                new FrameLayout.LayoutParams(dp(190), dp(190)));
 
-        TextView heading = label(
-                "POWER MANAGEMENT", 12, 0xff41cdff, true);
-        heading.setLetterSpacing(.12f);
+        percent = label("--%", 42, WHITE, true);
+        percent.setGravity(Gravity.CENTER);
+        FrameLayout.LayoutParams percentParams =
+                new FrameLayout.LayoutParams(-1, -1);
+        ringFrame.addView(percent, percentParams);
 
-        LinearLayout.LayoutParams hp =
-                new LinearLayout.LayoutParams(-1, -2);
-        hp.topMargin = dp(25);
-        root.addView(heading, hp);
+        LinearLayout.LayoutParams ringParams =
+                new LinearLayout.LayoutParams(dp(190), dp(190));
+        ringParams.topMargin = dp(12);
+        batteryCard.addView(ringFrame, ringParams);
 
-        monitor = label(
-                "Monitor is stopped.", 14, 0xffd5e4ef, false);
+        state = label("Checking battery...", 13, BLUE, true);
+        batteryCard.addView(state);
 
-        LinearLayout.LayoutParams mp =
-                new LinearLayout.LayoutParams(-1, -2);
-        mp.topMargin = dp(9);
-        root.addView(monitor, mp);
+        temp = label("Temperature: --", 12, MUTED, false);
+        batteryCard.addView(temp, topParams(8));
 
-        addButton(root, "START SMART BATTERY MONITOR",
-                v -> startMonitor());
+        // Power management
+        addSection(root, "POWER MANAGEMENT",
+                "Control and optimize your battery usage.");
 
-        addButton(root, "OPEN BATTERY SAVER SETTINGS",
-                v -> openSetting(Settings.ACTION_BATTERY_SAVER_SETTINGS));
+        LinearLayout powerCard = glassCard();
+        root.addView(powerCard, topParams(12));
 
-        addButton(root, "BATTERY OPTIMIZATION SETTINGS",
+        monitor = label("Monitor is stopped.", 12, MUTED, false);
+        powerCard.addView(monitor);
+
+        addButton(powerCard, "START SMART BATTERY MONITOR",
+                v -> startMonitor(), true);
+
+        addButton(powerCard, "BATTERY SAVER SETTINGS",
+                v -> openSetting(Settings.ACTION_BATTERY_SAVER_SETTINGS), false);
+
+        addButton(powerCard, "BATTERY OPTIMIZATION",
                 v -> openSetting(
-                        Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS));
+                        Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS),
+                false);
 
-        addButton(root, "DISPLAY POWER SETTINGS",
-                v -> openSetting(Settings.ACTION_DISPLAY_SETTINGS));
+        addButton(powerCard, "DISPLAY POWER SETTINGS",
+                v -> openSetting(Settings.ACTION_DISPLAY_SETTINGS), false);
 
-        addButton(root, "REFRESH BATTERY STATUS",
-                v -> refresh());
+        addButton(powerCard, "REFRESH BATTERY STATUS",
+                v -> refresh(), false);
 
-        TextView unusedHeading = label(
-                "5-DAY UNUSED APPS PROTECTION",
-                16, 0xff41cdff, true);
+        // App protection
+        addSection(root, "5-DAY APP PROTECTION",
+                "Find apps that have not been used for 5 days.");
 
-        LinearLayout.LayoutParams uh =
-                new LinearLayout.LayoutParams(-1, -2);
-        uh.topMargin = dp(30);
-        root.addView(unusedHeading, uh);
+        LinearLayout protectionCard = glassCard();
+        root.addView(protectionCard, topParams(12));
 
-        TextView explanation = label(
-                "JARVIS checks which launchable apps have not been used "
-                + "for the last 5 days. Grant Usage Access to begin.",
-                12, 0xffb4d7ec, false);
-
-        LinearLayout.LayoutParams ep =
-                new LinearLayout.LayoutParams(-1, -2);
-        ep.topMargin = dp(8);
-        root.addView(explanation, ep);
-
-        scanStatus = label(
-                "Usage Access: CHECKING",
-                13, 0xffffcc66, true);
-
-        LinearLayout.LayoutParams sp =
-                new LinearLayout.LayoutParams(-1, -2);
-        sp.topMargin = dp(12);
-        root.addView(scanStatus, sp);
+        scanStatus = label("● Usage Access: Checking",
+                12, 0xffffbd66, true);
+        protectionCard.addView(scanStatus);
 
         accessibilityStatus = label(
-                "JARVIS Accessibility: CHECKING",
-                13, 0xffffcc66, true);
-        LinearLayout.LayoutParams ap =
-                new LinearLayout.LayoutParams(-1, -2);
-        ap.topMargin = dp(14);
-        root.addView(accessibilityStatus, ap);
+                "● Accessibility: Checking",
+                12, 0xffffbd66, true);
+        protectionCard.addView(accessibilityStatus, topParams(10));
 
-        addButton(root, "ENABLE JARVIS ACCESSIBILITY",
-                v -> openAccessibilitySettings());
+        addButton(protectionCard, "ENABLE ACCESSIBILITY",
+                v -> openAccessibilitySettings(), false);
 
-        addButton(root, "GRANT USAGE ACCESS",
-                v -> openUsageAccessSettings());
+        addButton(protectionCard, "GRANT USAGE ACCESS",
+                v -> openUsageAccessSettings(), false);
 
-        addButton(root, "SCAN UNUSED APPS (5 DAYS)",
-                v -> scanUnusedApps());
+        addButton(protectionCard, "SCAN UNUSED APPS",
+                v -> scanUnusedApps(), true);
 
         unusedContainer = new LinearLayout(this);
         unusedContainer.setOrientation(LinearLayout.VERTICAL);
-
-        LinearLayout.LayoutParams up =
-                new LinearLayout.LayoutParams(-1, -2);
-        up.topMargin = dp(12);
-        root.addView(unusedContainer, up);
+        protectionCard.addView(unusedContainer, topParams(12));
 
         TextView disclaimer = label(
-                "At 20% battery, JARVIS sends an alert with a shortcut "
-                + "to Battery Saver. Android requires the user to confirm "
-                + "protected system changes. JARVIS cannot silently force "
-                + "Restricted battery mode on other apps. Review each "
-                + "app and confirm its battery restriction in App Info.",
-                11, 0xff96adc3, false);
-
-        LinearLayout.LayoutParams np =
-                new LinearLayout.LayoutParams(-1, -2);
-        np.topMargin = dp(20);
-        root.addView(disclaimer, np);
+                "JARVIS provides battery alerts and app protection "
+                + "guidance. Android requires user confirmation for "
+                + "protected system changes and battery restrictions.",
+                10, 0xff7189a5, false);
+        disclaimer.setGravity(Gravity.CENTER);
+        disclaimer.setPadding(dp(8), dp(18), dp(8), dp(8));
+        root.addView(disclaimer);
 
         setContentView(scroll);
     }
 
+    private void addSection(
+            LinearLayout root, String title, String description) {
+
+        TextView heading = label(title, 14, BLUE, true);
+        heading.setLetterSpacing(0.10f);
+        root.addView(heading, topParams(26));
+
+        TextView sub = label(description, 11, MUTED, false);
+        root.addView(sub, topParams(5));
+    }
+
+    private LinearLayout glassCard() {
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setPadding(dp(16), dp(16), dp(16), dp(16));
+        card.setBackground(gradient(
+                0xff13253a, 0xff0b1729, 0xff244969, 18));
+        return card;
+    }
+
+    private GradientDrawable gradient(
+            int first, int second, int stroke, int radius) {
+
+        GradientDrawable d = new GradientDrawable(
+                GradientDrawable.Orientation.TL_BR,
+                new int[]{first, second});
+        d.setCornerRadius(dp(radius));
+        d.setStroke(dp(1), stroke);
+        return d;
+    }
+
+    private void addButton(
+            LinearLayout root,
+            String title,
+            View.OnClickListener click,
+            boolean primary) {
+
+        Button b = new Button(this);
+        b.setText(title);
+        b.setTextColor(WHITE);
+        b.setTextSize(11);
+        b.setAllCaps(false);
+        b.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        b.setLetterSpacing(0.02f);
+        b.setBackground(gradient(
+                primary ? 0xff087dbd : 0xff17344f,
+                primary ? 0xff07528f : 0xff10263d,
+                primary ? 0xff42c5ff : 0xff285274,
+                13));
+        b.setOnClickListener(click);
+
+        LinearLayout.LayoutParams p =
+                new LinearLayout.LayoutParams(-1, dp(50));
+        p.topMargin = dp(10);
+        root.addView(b, p);
+    }
+
+    private TextView label(
+            String text, int size, int color, boolean bold) {
+
+        TextView v = new TextView(this);
+        v.setText(text);
+        v.setTextSize(size);
+        v.setTextColor(color);
+
+        if (bold) {
+            v.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        }
+        return v;
+    }
+
+    private LinearLayout.LayoutParams topParams(int margin) {
+        LinearLayout.LayoutParams p =
+                new LinearLayout.LayoutParams(-1, -2);
+        p.topMargin = dp(margin);
+        return p;
+    }
+
+    private void addTopSpace(
+            LinearLayout root, View view, int margin) {
+        root.addView(view, topParams(margin));
+    }
 
     private void scheduleUnusedAppScan() {
         PeriodicWorkRequest request =
@@ -231,8 +313,7 @@ public class MainActivity extends Activity {
         WorkManager.getInstance(this).enqueueUniquePeriodicWork(
                 "JARVIS_UNUSED_APP_SCAN",
                 ExistingPeriodicWorkPolicy.KEEP,
-                request
-        );
+                request);
     }
 
     private void openUsageAccessSettings() {
@@ -245,14 +326,12 @@ public class MainActivity extends Activity {
 
     private void scanUnusedApps() {
         if (!UnusedAppsScanner.hasUsageAccess(this)) {
-            scanStatus.setText(
-                    "Please grant Usage Access first.");
+            scanStatus.setText("Please grant Usage Access first.");
             openUsageAccessSettings();
             return;
         }
 
         scanStatus.setText("Scanning apps...");
-
         unusedContainer.removeAllViews();
 
         List<UnusedAppsScanner.UnusedApp> apps =
@@ -264,43 +343,29 @@ public class MainActivity extends Activity {
             return;
         }
 
-        scanStatus.setText(
-                apps.size() + " unused app(s) found.");
+        scanStatus.setText(apps.size() + " unused app(s) found.");
 
         for (UnusedAppsScanner.UnusedApp app : apps) {
-            LinearLayout card = new LinearLayout(this);
-            card.setOrientation(LinearLayout.VERTICAL);
-            card.setPadding(dp(14), dp(14), dp(14), dp(14));
-            card.setBackground(
-                    shape(0xff0b1d34, 0xff146996, 1, 14));
+            LinearLayout card = glassCard();
+            card.setPadding(dp(13), dp(13), dp(13), dp(13));
 
             LinearLayout.LayoutParams cp =
                     new LinearLayout.LayoutParams(-1, -2);
             cp.bottomMargin = dp(10);
             unusedContainer.addView(card, cp);
 
-            TextView name = label(
-                    app.name, 15, Color.WHITE, true);
-            card.addView(name);
-
-            TextView detail = label(
-                    app.packageName,
-                    10, 0xff96adc3, false);
-
-            LinearLayout.LayoutParams dp1 =
-                    new LinearLayout.LayoutParams(-1, -2);
-            dp1.topMargin = dp(5);
-            card.addView(detail, dp1);
+            card.addView(label(app.name, 14, WHITE, true));
+            card.addView(label(
+                    app.packageName, 10, MUTED, false), topParams(4));
 
             Button info = new Button(this);
-            info.setText("OPEN APP INFO / BATTERY SETTINGS");
-            info.setTextColor(Color.WHITE);
-            info.setTextSize(11);
-            info.setAllCaps(false);
-            info.setBackground(
-                    shape(0xff0c4169, 0xff2bb1e6, 1, 12));
-
             info.setText("OPEN APP INFO / TRY RESTRICTION");
+            info.setTextColor(WHITE);
+            info.setTextSize(10);
+            info.setAllCaps(false);
+            info.setBackground(gradient(
+                    0xff07528f, 0xff10263d, 0xff42c5ff, 12));
+
             info.setOnClickListener(v -> {
                 if (!isAccessibilityEnabled()) {
                     scanStatus.setText(
@@ -332,12 +397,11 @@ public class MainActivity extends Activity {
             });
 
             LinearLayout.LayoutParams bp =
-                    new LinearLayout.LayoutParams(-1, dp(48));
-            bp.topMargin = dp(8);
+                    new LinearLayout.LayoutParams(-1, dp(46));
+            bp.topMargin = dp(9);
             card.addView(info, bp);
         }
     }
-
 
     private boolean isAccessibilityEnabled() {
         String enabled = Settings.Secure.getString(
@@ -404,6 +468,10 @@ public class MainActivity extends Activity {
 
         percent.setText(pct >= 0 ? pct + "%" : "--%");
 
+        if (batteryRing != null) {
+            batteryRing.setProgress(pct);
+        }
+
         state.setText(
                 plugged != 0
                         ? "CHARGING / POWER CONNECTED"
@@ -414,7 +482,7 @@ public class MainActivity extends Activity {
         temp.setText(
                 t >= 0
                         ? String.format(
-                        java.util.Locale.getDefault(),
+                        Locale.getDefault(),
                         "Temperature: %.1f °C", t / 10f)
                         : "Temperature: Not available");
     }
@@ -430,58 +498,55 @@ public class MainActivity extends Activity {
         }
     }
 
-    private void addButton(
-            LinearLayout root,
-            String title,
-            View.OnClickListener click) {
-
-        Button b = new Button(this);
-        b.setText(title);
-        b.setTextColor(Color.WHITE);
-        b.setTextSize(12);
-        b.setAllCaps(false);
-        b.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
-        b.setBackground(
-                shape(0xff0c4169, 0xff2bb1e6, 1, 14));
-        b.setOnClickListener(click);
-
-        LinearLayout.LayoutParams p =
-                new LinearLayout.LayoutParams(-1, dp(52));
-        p.topMargin = dp(10);
-        root.addView(b, p);
-    }
-
-    private TextView label(
-            String s, int size, int color, boolean bold) {
-
-        TextView v = new TextView(this);
-        v.setText(s);
-        v.setTextSize(size);
-        v.setTextColor(color);
-
-        if (bold) {
-            v.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
-        }
-
-        return v;
-    }
-
-    private GradientDrawable shape(
-            int color, int stroke, int width, int radius) {
-
-        GradientDrawable d = new GradientDrawable();
-        d.setColor(color);
-        d.setCornerRadius(dp(radius));
-
-        if (width > 0) {
-            d.setStroke(dp(width), stroke);
-        }
-
-        return d;
-    }
-
     private int dp(int n) {
         return Math.round(
                 n * getResources().getDisplayMetrics().density);
+    }
+
+    private class BatteryRing extends View {
+
+        private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final RectF oval = new RectF();
+        private int progress = 0;
+
+        BatteryRing() {
+            super(MainActivity.this);
+        }
+
+        void setProgress(int value) {
+            progress = Math.max(0, Math.min(100, value));
+            invalidate();
+        }
+
+        @Override
+        protected void onDraw(Canvas canvas) {
+            super.onDraw(canvas);
+
+            float cx = getWidth() / 2f;
+            float cy = getHeight() / 2f;
+            float radius = dp(77);
+            float stroke = dp(9);
+
+            oval.set(cx - radius, cy - radius,
+                    cx + radius, cy + radius);
+
+            paint.setStyle(Paint.Style.STROKE);
+            paint.setStrokeWidth(stroke);
+            paint.setStrokeCap(Paint.Cap.ROUND);
+            paint.setColor(0xff263c53);
+            canvas.drawArc(oval, 135, 270, false, paint);
+
+            paint.setShader(null);
+            paint.setColor(BLUE);
+            canvas.drawArc(oval, 135,
+                    270f * progress / 100f, false, paint);
+
+            paint.setStyle(Paint.Style.FILL);
+            paint.setColor(0xff9aafc8);
+            paint.setTextAlign(Paint.Align.CENTER);
+            paint.setTextSize(dp(10));
+            paint.setTypeface(Typeface.DEFAULT_BOLD);
+            canvas.drawText("BATTERY", cx, cy + dp(35), paint);
+        }
     }
 }
