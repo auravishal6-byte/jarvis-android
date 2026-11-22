@@ -380,6 +380,7 @@ public class MainActivity extends Activity {
                         .putBoolean("flow_active", true)
                         .putBoolean("battery_page_open", false)
                         .putBoolean("pending_verify", false)
+                        .putInt("flow_step", 0)
                         .putString("target_package", app.packageName)
                         .apply();
 

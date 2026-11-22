@@ -15,8 +15,6 @@ public class BackgroundRestrictionAccessibilityService
         extends AccessibilityService {
 
     private static final String PREF = "jarvis_restriction";
-    private static final String TARGET =
-            "restrict background power usage";
 
     private final Handler handler = new Handler(Looper.getMainLooper());
 
@@ -33,7 +31,40 @@ public class BackgroundRestrictionAccessibilityService
         AccessibilityNodeInfo root = getRootInActiveWindow();
         if (root == null || !isTargetAppVisible(root)) return;
 
-        AccessibilityNodeInfo label = findExactLabel(root);
+        int step = prefs.getInt("flow_step", 0);
+
+        if (step == 0) {
+            clickNext(root, "Battery usage", 1);
+        } else if (step == 1) {
+            clickNext(root, "Background power control", 2);
+        } else if (step == 2) {
+            applyRestriction(root);
+        }
+    }
+
+    private void clickNext(
+            AccessibilityNodeInfo root, String text, int nextStep) {
+
+        AccessibilityNodeInfo label = findText(root, text);
+        if (label == null) return;
+
+        AccessibilityNodeInfo target = findClickableAncestor(label);
+
+        if (target == null ||
+                !target.performAction(
+                        AccessibilityNodeInfo.ACTION_CLICK)) {
+            finishFlow(false);
+            return;
+        }
+
+        getSharedPreferences(PREF, MODE_PRIVATE)
+                .edit().putInt("flow_step", nextStep).apply();
+    }
+
+    private void applyRestriction(AccessibilityNodeInfo root) {
+        AccessibilityNodeInfo label =
+                findText(root, "Restrict background power usage");
+
         if (label == null) return;
 
         AccessibilityNodeInfo control = findAssociatedControl(label);
@@ -44,19 +75,22 @@ public class BackgroundRestrictionAccessibilityService
             return;
         }
 
-        AccessibilityNodeInfo clickTarget = findClickTarget(control);
-        if (clickTarget == null ||
-                !clickTarget.performAction(
+        AccessibilityNodeInfo target = findClickableAncestor(control);
+
+        if (target == null ||
+                !target.performAction(
                         AccessibilityNodeInfo.ACTION_CLICK)) {
             finishFlow(false);
             return;
         }
 
-        prefs.edit().putBoolean("pending_verify", true).apply();
+        getSharedPreferences(PREF, MODE_PRIVATE)
+                .edit().putBoolean("pending_verify", true).apply();
 
-        handler.postDelayed(this::verifyRestriction, 1000);
         Toast.makeText(this, "Checking restriction status...",
                 Toast.LENGTH_SHORT).show();
+
+        handler.postDelayed(this::verifyRestriction, 1200);
     }
 
     private boolean isTargetAppVisible(AccessibilityNodeInfo root) {
@@ -99,52 +133,39 @@ public class BackgroundRestrictionAccessibilityService
         return false;
     }
 
-    private void verifyRestriction() {
-        AccessibilityNodeInfo root = getRootInActiveWindow();
-
-        boolean verified = root != null &&
-                isTargetAppVisible(root);
-
-        if (verified) {
-            AccessibilityNodeInfo label = findExactLabel(root);
-            AccessibilityNodeInfo control =
-                    label == null ? null : findAssociatedControl(label);
-
-            verified = control != null && control.isChecked();
-        }
-
-        finishFlow(verified);
-    }
-
-    private void finishFlow(boolean verified) {
-        getSharedPreferences(PREF, MODE_PRIVATE)
-                .edit()
-                .putBoolean("flow_active", false)
-                .putBoolean("pending_verify", false)
-                .apply();
-
-        Toast.makeText(this,
-                verified ? "Restriction verified ON."
-                        : "Could not verify. Please check manually.",
-                Toast.LENGTH_LONG).show();
-    }
-
-    private AccessibilityNodeInfo findExactLabel(
-            AccessibilityNodeInfo node) {
+    private AccessibilityNodeInfo findText(
+            AccessibilityNodeInfo node, String expected) {
         if (node == null) return null;
 
-        if (matches(node.getText()) ||
-                matches(node.getContentDescription())) return node;
+        if (matches(node.getText(), expected) ||
+                matches(node.getContentDescription(), expected)) {
+            return node;
+        }
 
         for (int i = 0; i < node.getChildCount(); i++) {
-            AccessibilityNodeInfo found = findExactLabel(node.getChild(i));
+            AccessibilityNodeInfo found =
+                    findText(node.getChild(i), expected);
             if (found != null) return found;
         }
+
         return null;
     }
 
-    private boolean matches(CharSequence value) {
-        return value != null && normalize(value.toString()).equals(TARGET);
+    private boolean matches(CharSequence value, String expected) {
+        return value != null &&
+                normalize(value.toString()).equals(normalize(expected));
+    }
+
+    private AccessibilityNodeInfo findClickableAncestor(
+            AccessibilityNodeInfo node) {
+        AccessibilityNodeInfo current = node;
+
+        for (int i = 0; current != null && i < 7; i++) {
+            if (current.isClickable()) return current;
+            current = current.getParent();
+        }
+
+        return node;
     }
 
     private AccessibilityNodeInfo findAssociatedControl(
@@ -160,6 +181,7 @@ public class BackgroundRestrictionAccessibilityService
 
             current = current.getParent();
         }
+
         return null;
     }
 
@@ -179,15 +201,37 @@ public class BackgroundRestrictionAccessibilityService
         }
     }
 
-    private AccessibilityNodeInfo findClickTarget(
-            AccessibilityNodeInfo control) {
-        AccessibilityNodeInfo current = control;
+    private void verifyRestriction() {
+        AccessibilityNodeInfo root = getRootInActiveWindow();
 
-        for (int i = 0; current != null && i < 3; i++) {
-            if (current.isClickable()) return current;
-            current = current.getParent();
+        boolean verified = root != null &&
+                isTargetAppVisible(root);
+
+        if (verified) {
+            AccessibilityNodeInfo label = findText(
+                    root, "Restrict background power usage");
+
+            AccessibilityNodeInfo control =
+                    label == null ? null : findAssociatedControl(label);
+
+            verified = control != null && control.isChecked();
         }
-        return null;
+
+        finishFlow(verified);
+    }
+
+    private void finishFlow(boolean verified) {
+        getSharedPreferences(PREF, MODE_PRIVATE)
+                .edit()
+                .putBoolean("flow_active", false)
+                .putBoolean("pending_verify", false)
+                .putInt("flow_step", 0)
+                .apply();
+
+        Toast.makeText(this,
+                verified ? "Restriction verified ON."
+                        : "Could not verify. Please check manually.",
+                Toast.LENGTH_LONG).show();
     }
 
     private String normalize(String value) {
