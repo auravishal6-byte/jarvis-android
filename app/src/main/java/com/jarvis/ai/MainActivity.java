@@ -29,16 +29,20 @@ public class MainActivity extends Activity {
     private Uri cameraUri;
     private boolean captureMode;
     private boolean pendingCamera;
+    private WebView webView;
+    private JarvisBridge jarvisBridge;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        WebView webView = new WebView(this);
+        webView = new WebView(this);
         WebSettings settings = webView.getSettings();
         settings.setJavaScriptEnabled(true);
         settings.setDomStorageEnabled(true);
         webView.addJavascriptInterface(new PdfBridge(), "Android");
+        jarvisBridge = new JarvisBridge(this, webView);
+        webView.addJavascriptInterface(jarvisBridge, "Jarvis");
 
         webView.setWebViewClient(new WebViewClient());
         webView.setWebChromeClient(new WebChromeClient() {
@@ -198,6 +202,9 @@ public class MainActivity extends Activity {
             }
             pendingCamera = false;
         }
+        if (jarvisBridge != null) {
+            jarvisBridge.onRequestPermissionsResult(requestCode, grantResults);
+        }
     }
 
     @Override
@@ -219,6 +226,18 @@ public class MainActivity extends Activity {
             fileCallback.onReceiveValue(results);
             fileCallback = null;
         }
+    }
+
+    @Override
+    protected void onPause() {
+        if (jarvisBridge != null) jarvisBridge.stopListening();
+        super.onPause();
+    }
+
+    @Override
+    protected void onDestroy() {
+        if (jarvisBridge != null) jarvisBridge.release();
+        super.onDestroy();
     }
 
     @Override

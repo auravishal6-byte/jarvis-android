@@ -7,6 +7,11 @@ body.chat-active .hero,body.chat-active .connection,body.chat-active .footer{dis
 .attach{flex-shrink:0;width:42px;height:42px;border:0;border-radius:50%;background:linear-gradient(145deg,#fbfdff,#dce8f8);color:#176aba;box-shadow:2px 4px 8px #b3c4e0;display:grid;place-items:center}
 .attach svg{width:20px;height:20px}
 .attach:active{transform:scale(.96)}
+.mic{flex-shrink:0;width:42px;height:42px;border:0;border-radius:50%;background:linear-gradient(145deg,#fbfdff,#dce8f8);color:#176aba;box-shadow:2px 4px 8px #b3c4e0;display:grid;place-items:center}
+.mic svg{width:20px;height:20px}
+.mic:active{transform:scale(.96)}
+#voiceStatus{font-size:10px;color:var(--muted);padding:5px 10px;min-height:20px}
+
 .sheet{display:none;margin-top:12px;padding:10px;border-radius:24px;background:linear-gradient(140deg,#f8faff,#e8eefb);box-shadow:var(--raise)}
 .sheet.open{display:block}
 .sheet-row{display:flex;align-items:center;gap:15px;padding:11px 12px;border-radius:17px;font-size:16px;font-weight:600;color:#22345f;border:0;background:transparent;width:100%;text-align:left}
@@ -45,7 +50,8 @@ body.archive-active .intro,body.archive-active main>.panel,body.archive-active .
 <section class="panel" aria-labelledby="chat-heading"><div class="panel-head"><h2 id="chat-heading">Conversation</h2><div style="display:flex;gap:11px"><button class="text-button" onclick="openArchive()">HISTORY</button><button class="text-button" onclick="clearChat()">CLEAR CHAT</button></div></div>
 <div id="chat" role="log" aria-live="polite"><div class="bot">JARVIS: Good day, Sir. Systems are online. How may I assist you?</div></div>
 <div class="chip" id="chip"><span class="thumb" id="chipThumb"><svg viewBox="0 0 24 24" fill="none"><rect x="4" y="5" width="16" height="14" rx="2.5" stroke="currentColor" stroke-width="1.8"/><circle cx="9.2" cy="10" r="1.5" fill="currentColor"/><path d="M4.5 16.5l4-3.6 3.2 2.8 2.8-2.3 5 3.9" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg></span><span id="chipName"></span><button class="x" onclick="clearPending()" aria-label="Remove attachment">\u2715</button></div>
-<div class="row"><button class="attach" aria-label="Add attachment" onclick="toggleSheet()"><svg viewBox="0 0 24 24" fill="none"><path d="M12 5.5v13M5.5 12h13" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"/></svg></button><input onclick="document.body.classList.add('chat-active')" onfocus="document.body.classList.add('chat-active')" id="message" aria-label="Message JARVIS" placeholder="Ask JARVIS anything..." onkeydown="if(event.key==='Enter')sendMessage()"><button class="send" aria-label="Send message" onclick="sendMessage()"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 4l15 8-15 8 3-8-3-8z" fill="currentColor"/><path d="M8 12h8" stroke="#278bdf" stroke-width="1.5"/></svg></button></div>
+<div class="row"><button class="attach" aria-label="Add attachment" onclick="toggleSheet()"><svg viewBox="0 0 24 24" fill="none"><path d="M12 5.5v13M5.5 12h13" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"/></svg></button><button class="mic" aria-label="Voice command" onclick="startJarvisVoice()"><svg viewBox="0 0 24 24" fill="none"><rect x="9" y="3" width="6" height="12" rx="3" stroke="currentColor" stroke-width="1.8"/><path d="M5.5 11a6.5 6.5 0 0013 0M12 17.5V21m-3 0h6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button><input onclick="document.body.classList.add('chat-active')" onfocus="document.body.classList.add('chat-active')" id="message" aria-label="Message JARVIS" placeholder="Ask JARVIS anything..." onkeydown="if(event.key==='Enter')sendMessage()"><button class="send" aria-label="Send message" onclick="sendMessage()"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 4l15 8-15 8 3-8-3-8z" fill="currentColor"/><path d="M8 12h8" stroke="#278bdf" stroke-width="1.5"/></svg></button></div>
+<div id="voiceStatus" aria-live="polite"></div>
 <div class="sheet" id="sheet"><button class="sheet-row" onclick="pickCamera()"><span class="sheet-ic"><svg viewBox="0 0 24 24" fill="none"><path d="M4 7.5h3l2-2.3h6l2 2.3h3V19H4z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><circle cx="12" cy="12.8" r="3.4" stroke="currentColor" stroke-width="1.8"/></svg></span>Camera</button><button class="sheet-row" onclick="pickPhotos()"><span class="sheet-ic"><svg viewBox="0 0 24 24" fill="none"><rect x="4" y="5" width="16" height="14" rx="2.5" stroke="currentColor" stroke-width="1.8"/><circle cx="9.2" cy="10" r="1.5" fill="currentColor"/><path d="M4.5 16.5l4-3.6 3.2 2.8 2.8-2.3 5 3.9" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg></span>Photos</button><button class="sheet-row" onclick="pickFiles()"><span class="sheet-ic"><svg viewBox="0 0 24 24" fill="none"><path d="M9 12.4l4.9-4.9a3.1 3.1 0 014.4 4.4l-6.6 6.6a5 5 0 01-7-7l6-6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></span>Files</button></div>
 <input type="file" id="filePick" style="display:none" onchange="onFilePicked(event)"></section>
 
@@ -151,6 +157,48 @@ function maybeAutoMemory(t){
  else if(r==='duplicate')addMessage('bot','Ye pehle se Memory mein saved hai, Sir.');
  else addMessage('bot','Sorry Sir, memory save nahi ho payi.');
 }
+
+function startJarvisVoice(){
+ if(window.Jarvis && Jarvis.startVoiceRecognition){
+  document.getElementById('voiceStatus').textContent='Microphone starting...';
+  Jarvis.startVoiceRecognition();
+ }else{
+  document.getElementById('voiceStatus').textContent='Voice feature unavailable.';
+ }
+}
+window.onJarvisVoiceStatus=function(message){
+ document.getElementById('voiceStatus').textContent=message;
+};
+window.onJarvisActionResult=function(message){
+ addMessage('bot',message);
+ document.getElementById('voiceStatus').textContent='';
+};
+window.onJarvisVoiceResult=function(text){
+ addMessage('user','🎙 '+text);
+ var t=text.toLowerCase().trim();
+ var action=null;
+
+ if((/(torch|flash|flashlight|टॉर्च)/.test(t) && /(on|chalu| चालू|jala|जला|जलाओ)/.test(t)) || /(torch|flash|टॉर्च).*(चालू|जला)/.test(t)){
+  action='torch_on';
+ }else if((/(torch|flash|flashlight|टॉर्च)/.test(t) && /(off|band|बंद)/.test(t)) || /(torch|flash|टॉर्च).*(बंद)/.test(t)){
+  action='torch_off';
+ }else if(/(volume|आवाज|आवाज़|वॉल्यूम).*(up|increase|badha|बढ़ा|ज्यादा|तेज)/.test(t) || /(volume|आवाज|आवाज़|वॉल्यूम).*(up|badhao)/.test(t)){
+  action='volume_up';
+ }else if(/(volume|आवाज|आवाज़|वॉल्यूम).*(down|decrease|kam|कम|घटा)/.test(t)){
+  action='volume_down';
+ }else if(/(battery|बैटरी|charge|चार्ज)/.test(t)){
+  action='battery';
+ }
+
+ if(action){
+  document.getElementById('voiceStatus').textContent='Command executing...';
+  Jarvis.performAction(action);
+ }else{
+  document.getElementById('message').value=text;
+  sendMessage();
+ }
+}
+
 async function sendMessage(){
  const input=document.getElementById('message');
  const prompt=input.value.trim();
